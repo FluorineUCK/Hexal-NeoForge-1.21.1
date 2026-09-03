@@ -1,9 +1,0 @@
-{
-  "replace": false,
-  "values": [
-    "hexal:wisp/consume",
-    "hexal:wisp/seon/set",
-    "hexal:tick",
-    "hexal:gate/make"
-  ]
-}

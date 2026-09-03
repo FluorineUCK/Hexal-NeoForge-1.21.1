@@ -1,0 +1,5 @@
+gradle.projectsEvaluated {
+    def target = gradle.rootProject
+    def probeJar = target.file('relay-regression-probe/hexal-relay-serialization-probe.jar')
+    target.dependencies.add('localRuntime', target.files(probeJar))
+}

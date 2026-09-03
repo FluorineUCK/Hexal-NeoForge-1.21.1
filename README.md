@@ -1,38 +1,25 @@
-# Hexal
 
-A minecraft mod which is an addon for [Hex Casting](https://github.com/gamma-delta/HexMod/), adding new patterns (as well as whatever else I feel like).
+Installation information
+=======
 
-## Branches
+This template repository can be directly cloned to get you started with a new
+mod. Simply create a new repository cloned from this one, by following the
+instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
 
-* `main`: Active development for Minecraft 1.20.1.
-* `1.19.2`: Long-term support for Minecraft 1.19.2.
-* `1.18.2`: Long-term support for Minecraft 1.18.2.
+Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
 
-## Maven
+If at any point you are missing libraries in your IDE, or you've run into problems you can
+run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
+{this does not affect your code} and then start the process again.
 
-Hexal is available on https://maven.hexxy.media. To depend on it, add something like this to your Gradle build script:
+Mapping Names:
+============
+By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
+in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
+license. For the latest license text, refer to the mapping file itself, or the reference copy here:
+https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
 
-```kotlin
-repositories {
-    maven {
-        url = uri("https://maven.hexxy.media")
-    }
-}
-
-dependencies {
-    // common (xplat template)
-    modImplementation("ram.talia.hexal:hexal-common-$minecraftVersion:$hexalVersion")
-
-    // common (Architectury)
-    modImplementation("ram.talia.hexal:hexal-fabric-$minecraftVersion:$hexalVersion")
-
-    // fabric
-    modImplementation("ram.talia.hexal:hexal-fabric-$minecraftVersion:$hexalVersion")
-
-    // forge (ForgeGradle)
-    modImplementation(fg.deobf("ram.talia.hexal:hexal-forge-$minecraftVersion:$hexalVersion"))
-
-    // forge (Architectury)
-    modImplementation("ram.talia.hexal:hexal-forge-$minecraftVersion:$hexalVersion")
-}
-```
+Additional Resources: 
+==========
+Community Documentation: https://docs.neoforged.net/  
+NeoForged Discord: https://discord.neoforged.net/

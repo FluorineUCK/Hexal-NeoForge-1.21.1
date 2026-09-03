@@ -1,0 +1,6 @@
+﻿{
+  "type": "neoforge:add_features",
+  "biomes": "#minecraft:is_overworld",
+  "features": "hexal:amethyst_slipway_geode",
+  "step": "underground_decoration"
+}

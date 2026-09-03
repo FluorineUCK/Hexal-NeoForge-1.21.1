@@ -1,0 +1,7 @@
+{
+  "type": "hexal:freeze",
+  "blockIn": "minecraft:packed_ice",
+  "result": {
+    "Name": "minecraft:blue_ice"
+  }
+}

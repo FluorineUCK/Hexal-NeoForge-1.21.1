@@ -1,0 +1,182 @@
+package ram.talia.hexal;
+
+import at.petrak.hexcasting.api.casting.iota.Iota;
+import at.petrak.hexcasting.api.casting.iota.IotaType;
+import at.petrak.hexcasting.api.misc.MediaConstants;
+import at.petrak.hexcasting.api.pigment.FrozenPigment;
+import at.petrak.hexcasting.common.lib.HexRegistries;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.data.DataGenerator;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.syncher.EntityDataSerializer;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Player;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.data.event.GatherDataEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
+import net.neoforged.neoforge.registries.RegisterEvent;
+import org.slf4j.Logger;
+
+import com.mojang.logging.LogUtils;
+
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
+import ram.talia.hexal.api.casting.wisp.WispCastingManager;
+import ram.talia.hexal.api.config.HexalConfig;
+import ram.talia.hexal.api.gates.GateManager;
+import ram.talia.hexal.common.entities.BaseWisp;
+import ram.talia.hexal.common.lib.HexalBlockEntities;
+import ram.talia.hexal.common.lib.HexalBlocks;
+import ram.talia.hexal.common.lib.HexalEntities;
+import ram.talia.hexal.common.lib.HexalFeatures;
+import ram.talia.hexal.common.lib.HexalItems;
+import ram.talia.hexal.common.lib.hex.HexalActions;
+import ram.talia.hexal.common.lib.hex.HexalArithmetics;
+import ram.talia.hexal.common.lib.hex.HexalIotaTypes;
+import ram.talia.hexal.common.recipe.HexalRecipeSerializers;
+import ram.talia.hexal.common.recipe.HexalRecipeTypes;
+import ram.talia.hexal.datagen.HexalActionTagProvider;
+import ram.talia.hexal.datagen.HexalplatRecipes;
+import ram.talia.hexal.eventhandlers.BoundStorageEventHandler;
+import ram.talia.hexal.eventhandlers.EverbookManager;
+import ram.talia.hexal.eventhandlers.WispCastingManagerEventHandler;
+import ram.talia.hexal.eventhandlers.PlayerLinkstoreManager;
+import ram.talia.hexal.neo.probe.HexalLegacyEverbookValidation;
+
+import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+
+// The value here should match an entry in the META-INF/neoforge.mods.toml file
+@Mod(Hexal.MODID)
+public class Hexal {
+    // Define mod id in a common place for everything to reference
+    public static final String MODID = "hexal";
+    // Directly reference a slf4j logger
+    public static final Logger LOGGER = LogUtils.getLogger();
+
+    public static final EntityDataSerializer<FrozenPigment> PIGMENT_SERIALIZER = EntityDataSerializer.forValueType(FrozenPigment.STREAM_CODEC);
+
+    // The constructor for the mod class is the first code that is run when your mod is loaded.
+    // FML will recognize some parameter types like IEventBus or ModContainer and pass them in automatically.
+    public Hexal(IEventBus modEventBus, ModContainer modContainer) {
+        // Register the commonSetup method for modloading
+        modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::onDatagen);
+
+        // Register ourselves for server and other game events we are interested in.
+        // Note that this is necessary if and only if we want *this* class (Hexal) to respond directly to events.
+        // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
+        NeoForge.EVENT_BUS.register(this);
+
+        // Register the item to a creative tab
+        modEventBus.addListener(this::addCreative);
+
+        bind(Registries.BLOCK, HexalBlocks::registerBlocks, modEventBus);
+        bind(Registries.ITEM, HexalBlocks::registerBlockItems, modEventBus);
+        bind(Registries.BLOCK_ENTITY_TYPE, HexalBlockEntities::registerBlockEntities, modEventBus);
+        bind(HexRegistries.IOTA_TYPE, HexalIotaTypes::registerTypes, modEventBus);
+        bind(HexRegistries.ACTION, HexalActions::register, modEventBus);
+        bind(HexRegistries.ARITHMETIC, HexalArithmetics::register, modEventBus);
+        bind(Registries.RECIPE_SERIALIZER, HexalRecipeSerializers::registerSerializers, modEventBus);
+        bind(Registries.RECIPE_TYPE, HexalRecipeTypes::registerTypes, modEventBus);
+        bind(Registries.ENTITY_TYPE, HexalEntities::registerEntities, modEventBus);
+        bind(Registries.FEATURE, HexalFeatures::registerFeatures, modEventBus);
+        modEventBus.addListener((RegisterEvent event) -> {
+            event.register(NeoForgeRegistries.ENTITY_DATA_SERIALIZERS.key(), registryHelper -> {
+                registryHelper.register(modLoc("pigment"), PIGMENT_SERIALIZER);
+            });
+        });
+        HexalPacketHandler.init(modEventBus);
+
+        // Register our mod's ModConfigSpec so that FML can create and load the config file for us
+        modContainer.registerConfig(ModConfig.Type.SERVER, HexalConfig.Server.SPEC);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, HexalConfig.Client.SPEC);
+
+        NeoForge.EVENT_BUS.addListener(EverbookManager::playerLoggedIn);
+        NeoForge.EVENT_BUS.addListener(EverbookManager::playerLoggedOut);
+        NeoForge.EVENT_BUS.addListener(PlayerLinkstoreManager::playerLoggedIn);
+        NeoForge.EVENT_BUS.addListener(PlayerLinkstoreManager::playerLoggedOut);
+        NeoForge.EVENT_BUS.addListener(PlayerLinkstoreManager::playerClone);
+        NeoForge.EVENT_BUS.addListener(PlayerLinkstoreManager::playerTick);
+        NeoForge.EVENT_BUS.addListener(WispCastingManagerEventHandler::playerLoggedIn);
+        NeoForge.EVENT_BUS.addListener(WispCastingManagerEventHandler::playerLoggedOut);
+        NeoForge.EVENT_BUS.addListener(WispCastingManagerEventHandler::serverTick);
+        NeoForge.EVENT_BUS.addListener(BoundStorageEventHandler::playerLoggedIn);
+        NeoForge.EVENT_BUS.addListener(BoundStorageEventHandler::playerLoggedOut);
+    }
+
+
+    private void commonSetup(FMLCommonSetupEvent event) {
+        // Some common setup code
+        LOGGER.info("HELLO FROM COMMON SETUP");
+    }
+
+    public static Long toMediaFromDust(double dust) {
+        return (long) (dust*((double)MediaConstants.DUST_UNIT));
+    }
+
+    // Add the example block item to the building blocks tab
+    private void addCreative(BuildCreativeModeTabContentsEvent event) {
+        HexalBlocks.registerBlockCreativeTab(event::accept, event.getTab());
+        HexalItems.registerItemCreativeTab(event, event.getTab());
+    }
+
+    public static ResourceLocation modLoc(String str) {
+        return ResourceLocation.fromNamespaceAndPath(MODID, str);
+    }
+
+    public void onDatagen(GatherDataEvent event) {
+        final DataGenerator gen = event.getGenerator();
+        gen.addProvider(event.includeServer(), new HexalplatRecipes(gen.getPackOutput(), event.getLookupProvider()));
+        gen.addProvider(event.includeServer(), new HexalActionTagProvider(gen.getPackOutput(), event.getLookupProvider()));
+    }
+
+    // You can use SubscribeEvent and let the Event Bus discover methods to call
+    @SubscribeEvent
+    public void onServerStarting(ServerStartingEvent event) {
+        // Do something when the server starts
+        LOGGER.info("HELLO from server starting");
+        GateManager.extraInit(event.getServer());
+    }
+
+    @SubscribeEvent
+    public void onServerStarted(ServerStartedEvent event) {
+        HexalLegacyEverbookValidation.runIfEnabled(event.getServer());
+    }
+
+    public static Iota deserializeIota(Tag tag) {
+        return IotaType.TYPED_CODEC.decode(NbtOps.INSTANCE, tag).getOrThrow().getFirst();
+    }
+
+    public static Tag serializeIota(Iota iota) {
+        return IotaType.TYPED_CODEC.encodeStart(NbtOps.INSTANCE, iota).getOrThrow();
+    }
+
+    private <T> void bind(ResourceKey<? extends Registry<T>> registry, Consumer<BiConsumer<T, ResourceLocation>> source, IEventBus bus) {
+        bus.addListener((RegisterEvent event) -> {
+            event.register(registry, registryHelper -> {
+                source.accept((value, id) -> registryHelper.register(id, value));
+            });
+        });
+    }
+
+}

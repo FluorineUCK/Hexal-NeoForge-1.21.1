@@ -1,172 +1,30 @@
-name: Build and test
+name: Build
 
-on:
-  push:
-    branches:
-      - '*'
-  pull_request:
-  workflow_dispatch:
-
-permissions:
-  contents: read
+on: [push, pull_request]
 
 jobs:
-  build-mod:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          distribution: temurin
-          java-version: 17
+          fetch-depth: 0
+          fetch-tags: true
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
-      - name: Build mod
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # This is needed to be able to run ./gradlew below
+      # You can run `git update-index --chmod +x gradlew` then remove this step.
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build with Gradle
         run: ./gradlew build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mod-build
-          path: build/ciArtifacts/
-          if-no-files-found: error
-
-  test-mod:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Run unit tests
-        run: ./gradlew test
-
-      # if this step fails, you need to run your datagen and commit the updated files
-      - name: Check if datagen needs to be run
-        timeout-minutes: 3
-        run: |
-          mkdir -p /home/runner/.gradle/caches/fabric-loom/assets
-          ./gradlew runAllDatagen
-          git add --intent-to-add .
-          git diff --name-only --exit-code -- ":!:*/src/generated/resources/.cache/*"
-
-  runtime-test-mod:
-    needs: build-mod
-    strategy:
-      fail-fast: false
-      matrix:
-        env:
-          - server
-          - client
-        modloader:
-          - fabric
-          - forge
-        include:
-          - modloader: fabric
-            path: Fabric
-            mc-runtime-test: fabric
-            fabric-api: 0.85.0
-            # NOTE: these must be quoted and formatted exactly like this, since they'll be used as a bash array
-            dependencies: >-
-              'https://cdn.modrinth.com/data/Ha28R6CL/versions/vlhvI5Li/fabric-language-kotlin-1.10.18%2Bkotlin.1.9.22.jar'
-              'https://cdn.modrinth.com/data/K01OU20C/versions/qW85eawp/cardinal-components-api-5.2.2.jar'
-              'https://cdn.modrinth.com/data/nU0bVIaL/versions/PKvFvHeb/Patchouli-1.20.1-80-FABRIC.jar'
-              'https://cdn.modrinth.com/data/9s6osm5g/versions/s7VTKfLA/cloth-config-11.1.106-fabric.jar'
-              'https://cdn.modrinth.com/data/TZo2wHFe/versions/dabyDTwJ/paucal-0.6.0%2B1.20.1-fabric.jar'
-              'https://cdn.modrinth.com/data/nTW3yKrm/versions/IvI9LKNc/hexcasting-fabric-1.20.1-0.11.2.jar'
-              'https://cdn.modrinth.com/data/Jmt7p37B/versions/fbdx2AgN/moreiotas-fabric-1.20.1-0.1.1.jar'
-              'https://cdn.modrinth.com/data/8BmcQJ2H/versions/5bofFrdJ/geckolib-fabric-1.20.1-4.2.1.jar'
-              'https://cdn.modrinth.com/data/fin1PX4m/versions/fBoxabC2/inline-fabric-1.20.1-1.0.1.jar'
-          - modloader: forge
-            path: Forge
-            fabric-api: none
-            mc-runtime-test: lexforge
-            dependencies: >-
-              'https://cdn.modrinth.com/data/ordsPcFz/versions/9j6YaPp2/kotlinforforge-4.10.0-all.jar'
-              'https://cdn.modrinth.com/data/TZo2wHFe/versions/HyBiJPtT/paucal-0.6.0%2B1.20.1-forge.jar'
-              'https://cdn.modrinth.com/data/nU0bVIaL/versions/scPQNgN5/Patchouli-1.20.1-80-FORGE.jar'
-              'https://cdn.modrinth.com/data/nTW3yKrm/versions/xENnFQpR/hexcasting-forge-1.20.1-0.11.2.jar'
-              'https://cdn.modrinth.com/data/Jmt7p37B/versions/zrmwDsEQ/moreiotas-forge-1.20.1-0.1.1.jar'
-              'https://cdn.modrinth.com/data/8BmcQJ2H/versions/qq4z76WF/geckolib-forge-1.20.1-4.2.1.jar'
-              'https://cdn.modrinth.com/data/40FYwb4z/versions/fs9CeXYZ/caelus-forge-3.1.0%2B1.20.jar'
-              'https://cdn.modrinth.com/data/fin1PX4m/versions/huiPd6Lc/inline-forge-1.20.1-1.0.1.jar'
-              'https://cdn.modrinth.com/data/9s6osm5g/versions/JoLgnJ0G/cloth-config-11.1.106-forge.jar'
-
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Create cache key
-        run: |
-          cat <<END_OF_FILE > dependencies.txt
-          ${{ matrix.dependencies }}
-          END_OF_FILE
-
-      # https://github.com/actions/cache#skipping-steps-based-on-cache-hit
-      - name: Cache dependencies
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: run/mods
-          key: ${{ hashFiles('dependencies.txt') }}
-
-      - name: Download dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          for url in ${{ matrix.dependencies }}; do
-            wget --directory-prefix=run/mods/ "$url"
-          done
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: mod-build
-          path: build/ciArtifacts/
-
-      - name: Prepare mod jars
-        run: cp build/ciArtifacts/*${{ matrix.modloader }}*.jar run/mods
-
-      - name: Run MC test client
-        if: matrix.env == 'client'
-        # sometimes the headlessmc launcher just hangs for no clear reason
-        # you can try re-running the failed jobs if it hits this, or increase the timeout if your mod actually takes that long to load
-        timeout-minutes: 10
-        uses: headlesshq/mc-runtime-test@3.1.1
-        with:
-          java: 17
-          mc: 1.20.1
-          modloader: ${{ matrix.modloader }}
-          regex: '.*${{ matrix.modloader }}.*'
-          fabric-api: ${{ matrix.fabric-api }}
-          mc-runtime-test: ${{ matrix.mc-runtime-test }}
-
-      - name: Run MC test server
-        if: matrix.env == 'server'
-        timeout-minutes: 10  # see above
-        uses: headlesshq/mc-server-test@1.0.0
-        with:
-          java: 17
-          mc: 1.20.1
-          modloader: ${{ matrix.modloader }}
-          fabric-api: ${{ matrix.fabric-api }}
-
-  build-docs:
-    uses: ./.github/workflows/docs.yml
-    permissions:
-      contents: write
-      pages: read
-    with:
-      deploy-pages: ${{ github.event_name != 'pull_request' && contains(fromJson(vars.HEXDOC_BRANCHES), github.ref_name) }}
-      release: false

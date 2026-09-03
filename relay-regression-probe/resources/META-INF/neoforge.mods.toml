@@ -1,0 +1,13 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "MIT"
+[[mods]]
+modId = "hexal_relay_serialization_probe"
+version = "1.0.0"
+displayName = "Hexal Relay Serialization Regression Probe"
+[[dependencies.hexal_relay_serialization_probe]]
+modId = "hexal"
+type = "required"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "SERVER"

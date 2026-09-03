@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "bonus_rolls": 0,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "hexal:relay"
+        }
+      ],
+      "rolls": 1
+    }
+  ],
+  "random_sequence": "hexal:blocks/relay"
+}

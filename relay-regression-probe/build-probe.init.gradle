@@ -1,0 +1,27 @@
+import org.gradle.api.tasks.compile.JavaCompile
+import org.gradle.jvm.tasks.Jar
+
+gradle.projectsEvaluated {
+    def target = gradle.rootProject
+    def probeRoot = target.file('relay-regression-probe')
+    def probeClasses = target.layout.buildDirectory.dir('relay-regression-probe/classes')
+    def probeJar = probeRoot.toPath().resolve('hexal-relay-serialization-probe.jar').toFile()
+
+    def compileProbe = target.tasks.register('compileRelaySerializationProbe', JavaCompile) {
+        source = target.fileTree(probeRoot.toPath().resolve('src').toFile()) {
+            include '**/*.java'
+        }
+        classpath = target.sourceSets.main.runtimeClasspath
+        destinationDirectory = probeClasses
+        options.release = 21
+        options.encoding = 'UTF-8'
+    }
+
+    target.tasks.register('jarRelaySerializationProbe', Jar) {
+        dependsOn compileProbe
+        archiveFileName = probeJar.name
+        destinationDirectory = probeJar.parentFile
+        from(probeClasses)
+        from(probeRoot.toPath().resolve('resources').toFile())
+    }
+}
